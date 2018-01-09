@@ -6,7 +6,7 @@ using System.Linq;
 using System.IO;
 using ResourceManagement.AsyncOperations;
 using ResourceManagement.Util;
-
+#if !UNITY_METRO
 namespace ResourceManagement.ResourceProviders.Experimental
 {
     public class AssetBundleProviderRemoteWebRequest : ResourceProviderBase
@@ -14,23 +14,20 @@ namespace ResourceManagement.ResourceProviders.Experimental
         internal class InternalOp<TObject> : AsyncOperationBase<TObject>
             where TObject : class
         {
-            IResourceLocation m_location;
             int m_startFrame;
             ChunkedMemoryStream data;
             byte[] buffer = new byte[1024 * 1024];
             bool complete;
-            public InternalOp() : base("") {}
 
             public InternalOp<TObject> Start(IResourceLocation loc)
             {
                 m_result = null;
-                m_location = loc;
-                m_id = loc.id;
+                m_context = loc;
                 complete = false;
                 m_startFrame = Time.frameCount;
                 data = new ChunkedMemoryStream();
                 CompletionUpdater.UpdateUntilComplete("WebRequest" + loc.id, CompleteInMainThread);
-                var req = WebRequest.Create(m_location.id);
+                var req = WebRequest.Create(loc.id);
                 req.BeginGetResponse(AsyncCallback, req);
                 return this;
             }
@@ -70,9 +67,9 @@ namespace ResourceManagement.ResourceProviders.Experimental
 
             void InternalOp_completed(AsyncOperation obj)
             {
-                ResourceManagerEventCollector.PostEvent(ResourceManagerEventCollector.EventType.LoadAsyncCompletion, m_location, Time.frameCount - m_startFrame);
+                ResourceManagerEventCollector.PostEvent(ResourceManagerEventCollector.EventType.LoadAsyncCompletion, m_context, Time.frameCount - m_startFrame);
                 m_result = (obj as AssetBundleCreateRequest).assetBundle as TObject;
-                InvokeCompletionEvent(this);
+                InvokeCompletionEvent();
                 AsyncOperationCache.Instance.Release<TObject>(this);
                 data.Close();
                 data.Dispose();
@@ -221,3 +218,4 @@ namespace ResourceManagement.ResourceProviders.Experimental
         }
     }
 }
+#endif

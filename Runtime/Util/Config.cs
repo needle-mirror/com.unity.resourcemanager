@@ -1,9 +1,26 @@
 using System;
+using System.Reflection;
+using System.Collections.Generic;
+using System.Linq;
 namespace ResourceManagement.Util
 {
     public static class Config
     {
-        static System.Collections.Generic.Dictionary<string, string> cachedValues = new System.Collections.Generic.Dictionary<string, string>();
+#if !UNITY_EDITOR && UNITY_WSA_10_0 && ENABLE_DOTNET
+        static Assembly[] GetAssemblies()
+        {
+            //Not supported on UWP platforms
+            return new Assembly[0];
+        }
+#else
+        static Assembly[] GetAssemblies()
+        {
+            return AppDomain.CurrentDomain.GetAssemblies();
+        }
+#endif
+
+        static Dictionary<string, string> cachedValues = new Dictionary<string, string>();
+
         public static string GetGlobalVar(string var)
         {
             int i = var.LastIndexOf('.');
@@ -16,7 +33,7 @@ namespace ResourceManagement.Util
 
             var className = var.Substring(0, i);
             var propName = var.Substring(i + 1);
-            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var a in GetAssemblies())
             {
                 Type t = a.GetType(className, false, false);
                 if (t == null)
@@ -51,9 +68,13 @@ namespace ResourceManagement.Util
             return var;
         }
 
+        static Dictionary<string, string> cachedPaths = new Dictionary<string, string>();
         public static string ExpandPathWithGlobalVars(string p)
         {
-            return ExpandWithVars(p, '{', '}', GetGlobalVar);
+            string val = null;
+            if (!cachedPaths.TryGetValue(p, out val))
+                cachedPaths.Add(p, val = ExpandWithVars(p, '{', '}', GetGlobalVar));
+            return val;
         }
 
         public static string ExpandWithVars(string p, char startDelim, char endDelim, Func<string, string> varFunc)
@@ -71,5 +92,18 @@ namespace ResourceManagement.Util
                 p = p.Substring(0, i) + tokenVal + p.Substring(e + 1);
             }
         }
+
+
+        public static bool IsInstance<A, B>()
+        {
+            var tA = typeof(A);
+            var tB = typeof(B);
+#if !UNITY_EDITOR && UNITY_WSA_10_0 && ENABLE_DOTNET
+            return tB.GetTypeInfo().IsAssignableFrom(tA.GetTypeInfo());
+#else
+            return tB.IsAssignableFrom(tA);
+#endif
+        }
+
     }
 }
