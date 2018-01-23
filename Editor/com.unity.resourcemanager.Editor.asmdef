@@ -1,9 +1,0 @@
-{
-    "name": "com.unity.resourcemanager.Editor",
-    "references": [
-      "com.unity.resourcemanager.Runtime"
-    ],
-    "includePlatforms": [
-        "Editor"
-    ]
-}
