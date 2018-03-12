@@ -1,78 +1,74 @@
 using System;
 using System.Collections.Generic;
 
-namespace ResourceManagement.AsyncOperations
+namespace UnityEngine.ResourceManagement
 {
-    public class LoadGroupOperation<TObject> : AsyncOperationBase<IList<TObject>>
+    internal class LoadGroupOperation<TObject> : AsyncOperationBase<IList<TObject>>
         where TObject : class
     {
-        protected int totalToLoad;
-        int loadCount;
-        bool allStarted;
+        int m_loadedCount;
         Action<IAsyncOperation<TObject>> m_internalOnComplete;
         Action<IAsyncOperation<TObject>> m_action;
-        List<IAsyncOperation<TObject>> m_ops;
-        public override void SetResult(IList<TObject> result)
-        {
-            foreach (var op in m_ops)
-                m_result.Add(op.result);
-        }
-
+        List<IAsyncOperation<TObject>> m_operations = new List<IAsyncOperation<TObject>>();
         public LoadGroupOperation() 
         {
             m_internalOnComplete = LoadGroupOperation_completed;
         }
 
+        public override void ResetStatus()
+        {
+            base.ResetStatus();
+            Result = null;
+            m_operations.Clear();
+        }
+
         public virtual LoadGroupOperation<TObject> Start(IList<IResourceLocation> locations, Func<IResourceLocation, IAsyncOperation<TObject>> loadFunc, Action<IAsyncOperation<TObject>> onComplete)
         {
-            UnityEngine.Debug.Assert(locations != null, "Null location list passed into LoadGroupOperation");
-            totalToLoad = locations.Count;
-            m_context = locations;
-            loadCount = 0;
-            allStarted = false;
+            Validate();
+            Debug.Assert(locations != null, "Null location list passed into LoadGroupOperation");
+            Debug.Assert(loadFunc != null, "Null loadFunc passed into LoadGroupOperation");
+            m_loadedCount = 0;
+            Context = locations;
             m_action = onComplete;
-            if(m_result == null)
-                m_result = new List<TObject>(locations.Count);
-            else
-                m_result.Clear();
-
-            if(m_ops == null)
-                m_ops = new List<IAsyncOperation<TObject>>(locations.Count);
-            else
-                m_ops.Clear();
-
-            for(int i = 0; i < locations.Count; i++)
+            Result = new List<TObject>(locations.Count);
+            m_operations.Clear();
+            for (int i = 0; i < locations.Count; i++)
             {
                 var op = loadFunc(locations[i]);
-                m_ops.Add(op);
-                op.completed += m_internalOnComplete;
+                op.Completed += m_internalOnComplete;
+                Result.Add(default(TObject));
+                m_operations.Add(op);
             }
-
-            allStarted = true;
-
-            if (isDone)
-            {
-                SetResult(result);
-                InvokeCompletionEvent();
-            }
-
             return this;
         }
 
-        public override bool isDone { get { return allStarted && loadCount == totalToLoad; } }
-
-        void LoadGroupOperation_completed(IAsyncOperation<TObject> obj)
+        public override bool IsDone
         {
-            if (m_action != null)
-                m_action(obj);
-
-            loadCount++;
-
-            if (isDone)
+            get
             {
-                SetResult(result);
-                InvokeCompletionEvent();
+                Validate();
+                return Result != null && Result.Count == m_loadedCount;
             }
+        }
+
+        void LoadGroupOperation_completed(IAsyncOperation<TObject> op)
+        {
+            Validate();
+            if (m_action != null)
+                m_action(op);
+
+            m_loadedCount++;
+            for (int i = 0; i < m_operations.Count; i++)
+            {
+                if (m_operations[i] == op)
+                {
+                    Result[i] = op.Result;
+                    break;
+                }
+            }
+
+            if (IsDone)
+                InvokeCompletionEvent();
         }
     }
 }

@@ -1,19 +1,14 @@
 using System;
 using System.Collections.Generic;
 
-namespace ResourceManagement.AsyncOperations
+namespace UnityEngine.ResourceManagement
 {
     internal class EmptyGroupOperation<TObject> : LoadGroupOperation<TObject>
         where TObject : class
     {
         public EmptyGroupOperation()
         {
-            m_result = new TObject[0];
-        }
-
-        public override void SetResult(IList<TObject> result)
-        {
-            // Do nothing
+            Result = new TObject[0];
         }
 
         public override LoadGroupOperation<TObject> Start(IList<IResourceLocation> locations, Func<IResourceLocation, IAsyncOperation<TObject>> loadFunc, Action<IAsyncOperation<TObject>> onComplete)
@@ -21,7 +16,7 @@ namespace ResourceManagement.AsyncOperations
             return this;
         }
 
-        public override bool isDone
+        public override bool IsDone
         {
             get
             {
@@ -29,7 +24,7 @@ namespace ResourceManagement.AsyncOperations
             }
         }
 
-        public override float percentComplete
+        public override float PercentComplete
         {
             get
             {

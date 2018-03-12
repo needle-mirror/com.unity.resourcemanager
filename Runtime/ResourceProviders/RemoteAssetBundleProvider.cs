@@ -1,11 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine.Networking;
-using UnityEngine;
-using ResourceManagement.AsyncOperations;
-using ResourceManagement.Util;
-using System.IO;
 
-namespace ResourceManagement.ResourceProviders
+namespace UnityEngine.ResourceManagement
 {
     public class RemoteAssetBundleProvider : ResourceProviderBase
     {
@@ -15,31 +11,48 @@ namespace ResourceManagement.ResourceProviders
             System.Action<IAsyncOperation<IList<object>>> action;
             public InternalOp()
             {
-                action = (op) => { UnityWebRequestAssetBundle.GetAssetBundle(Config.ExpandPathWithGlobalVars((m_context as IResourceLocation).id)).SendWebRequest().completed += OnComplete; };
+                action = (op) => 
+                {
+                    var bundleURL = ResourceManagerConfig.ExpandPathWithGlobalVariables((Context as IResourceLocation).InternalId);
+                    var reqOp = UnityWebRequestAssetBundle.GetAssetBundle(bundleURL).SendWebRequest();
+                    if (reqOp.isDone)
+                        DelayedActionManager.AddAction((System.Action<AsyncOperation>)OnComplete, 0, reqOp);
+                    else
+                        reqOp.completed += OnComplete;
+                };
             }
 
-            public override InternalProviderOperation<TObject> Start(IResourceLocation loc, IAsyncOperation<IList<object>> loadDependencyOperation)
+            public InternalProviderOperation<TObject> Start(IResourceLocation location, IAsyncOperation<IList<object>> loadDependencyOperation)
             {
-                m_result = null;
-                m_context = loc;
-                loadDependencyOperation.completed += action;
-                return base.Start(loc, loadDependencyOperation);
+                Result = null;
+                Context = location;
+                loadDependencyOperation.Completed += action;
+                return base.Start(location);
             }
 
-            public override TObject ConvertResult(AsyncOperation op)
+            public override TObject ConvertResult(AsyncOperation operation)
             {
-                return ((op as UnityWebRequestAsyncOperation).webRequest.downloadHandler as DownloadHandlerAssetBundle).assetBundle as TObject;
+                return ((operation as UnityWebRequestAsyncOperation).webRequest.downloadHandler as DownloadHandlerAssetBundle).assetBundle as TObject;
             }
         }
 
-        public override IAsyncOperation<TObject> ProvideAsync<TObject>(IResourceLocation loc, IAsyncOperation<IList<object>> loadDependencyOperation)
+        public override IAsyncOperation<TObject> ProvideAsync<TObject>(IResourceLocation location, IAsyncOperation<IList<object>> loadDependencyOperation)
         {
-            var r = AsyncOperationCache.Instance.Acquire<InternalOp<TObject>, TObject>();
-            return r.Start(loc, loadDependencyOperation);
+            if (location == null)
+                throw new System.ArgumentNullException("location");
+            if (loadDependencyOperation == null)
+                throw new System.ArgumentNullException("loadDependencyOperation");
+
+            var operation = AsyncOperationCache.Instance.Acquire<InternalOp<TObject>, TObject>();
+            return operation.Start(location, loadDependencyOperation);
         }
 
-        public override bool Release(IResourceLocation loc, object asset)
+        public override bool Release(IResourceLocation location, object asset)
         {
+            if (location == null)
+                throw new System.ArgumentNullException("location");
+            if (asset == null)
+                throw new System.ArgumentNullException("asset");
             var bundle = asset as AssetBundle;
             if (bundle != null)
             {

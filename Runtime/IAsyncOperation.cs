@@ -1,7 +1,7 @@
 using System;
 using System.Collections;
 
-namespace ResourceManagement
+namespace UnityEngine.ResourceManagement
 {
     /// <summary>
     /// Status values for IAsyncOperations
@@ -22,19 +22,31 @@ namespace ResourceManagement
         /// returns the status of the operation
         /// </summary>
         /// <value><c>true</c> if is done; otherwise, <c>false</c>.</value>
-        AsyncOperationStatus status { get; }
-
+        AsyncOperationStatus Status { get; }
+        /// <summary>
+        /// internal integrity check
+        /// </summary>
+        /// <returns></returns>
+        bool Validate();
+        /// <summary>
+        /// used by Validate to ensure operation is in correct state
+        /// </summary>
+        bool IsValid { get; set; }
+        /// <summary>
+        /// Release operation back to internal cache. This can be used to avoid garbage collection.
+        /// </summary>
+        void Release();
         /// <summary>
         /// Gets a value indicating whether this <see cref="T:ResourceManagement.IAsyncOperation"/> is done.
         /// </summary>
         /// <value><c>true</c> if is done; otherwise, <c>false</c>.</value>
-        bool isDone { get; }
+        bool IsDone { get; }
 
         /// <summary>
         /// Gets the percent complete of this operation.
         /// </summary>
         /// <value>The percent complete.</value>
-        float percentComplete { get; }
+        float PercentComplete { get; }
 
         /// <summary>
         /// Reset status and error
@@ -45,24 +57,23 @@ namespace ResourceManagement
         /// Gets the context object related to this operation, usually set to the IResourceLocation.
         /// </summary>
         /// <value>The context object.</value>
-        object context { get; }
+        object Context { get; }
 
         /// <summary>
         /// Occurs when completed.
         /// </summary>
-        event Action<IAsyncOperation> completed;
-
+        event Action<IAsyncOperation> Completed;
         /// <summary>
         /// Gets the exception that caused this operation to change its status to Failure.
         /// </summary>
         /// <value>The exception.</value>
-        Exception error { get; }
+        Exception OperationException { get; }
 
 		/// <summary>
 		/// Gets the result.
 		/// </summary>
 		/// <value>The result.</value>
-		object result { get; }
+		object Result { get; }
 	}
 
 	/// <summary>
@@ -74,11 +85,15 @@ namespace ResourceManagement
         /// Gets the result as the templated type.
         /// </summary>
         /// <value>The result.</value>
-        new T result { get; }
-
+        new T Result { get; }
+        /// <summary>
+        /// Internally marks operations to not automatically release back to the cache.
+        /// </summary>
+        /// <returns>Passes back this</returns>
+        IAsyncOperation<T> Acquire();
         /// <summary>
         /// Occurs when completed.
         /// </summary>
-        new event Action<IAsyncOperation<T>> completed;
+        new event Action<IAsyncOperation<T>> Completed;
     }
 }

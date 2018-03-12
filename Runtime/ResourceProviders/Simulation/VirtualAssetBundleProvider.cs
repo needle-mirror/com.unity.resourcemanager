@@ -1,9 +1,7 @@
-using ResourceManagement.AsyncOperations;
-using ResourceManagement;
+#if UNITY_EDITOR
 using System.Collections.Generic;
-using UnityEngine;
 
-namespace ResourceManagement.ResourceProviders.Simulation
+namespace UnityEngine.ResourceManagement
 {
     internal class VirtualAssetBundleProvider : ResourceProviderBase
     {
@@ -15,38 +13,47 @@ namespace ResourceManagement.ResourceProviders.Simulation
             m_providerId = provId;
         }
 
-        public override string providerId{ get { return m_providerId; } }
+        public override string ProviderId{ get { return m_providerId; } }
         internal class InternalOp<TObject> : InternalProviderOperation<TObject>
             where TObject : class
         {
             public VirtualAssetBundleManager assetBundleManager;
 
-            public override InternalProviderOperation<TObject> Start(IResourceLocation loc, IAsyncOperation<IList<object>> loadDependencyOperation)
+            public InternalProviderOperation<TObject> Start(IResourceLocation location, IAsyncOperation<IList<object>> loadDependencyOperation)
             {
-                m_result = null;
-                loadDependencyOperation.completed += (obj) => {
-                    assetBundleManager.LoadAsync(loc).completed += (IAsyncOperation<VirtualAssetBundle> op) => {
-                        SetResult(op.result as TObject);
+                Result = null;
+                loadDependencyOperation.Completed += (obj) => {
+                    assetBundleManager.LoadAsync(location).Completed += (IAsyncOperation<VirtualAssetBundle> operation) => {
+                        SetResult(operation.Result as TObject);
                         OnComplete();
                     };
                 };
 
-                return base.Start(loc, loadDependencyOperation);
+                return base.Start(location);
             }
 
             public override TObject ConvertResult(AsyncOperation op) { return null; }
         }
 
-        public override IAsyncOperation<TObject> ProvideAsync<TObject>(IResourceLocation loc, IAsyncOperation<IList<object>> loadDependencyOperation)
+        public override IAsyncOperation<TObject> ProvideAsync<TObject>(IResourceLocation location, IAsyncOperation<IList<object>> loadDependencyOperation)
         {
-            var r = AsyncOperationCache.Instance.Acquire<InternalOp<TObject>, TObject>();
-            r.assetBundleManager = m_assetBundleManager;
-            return r.Start(loc, loadDependencyOperation);
+            if (location == null)
+                throw new System.ArgumentNullException("location");
+            if (loadDependencyOperation == null)
+                throw new System.ArgumentNullException("loadDependencyOperation");
+            var operation = AsyncOperationCache.Instance.Acquire<InternalOp<TObject>, TObject>();
+            operation.assetBundleManager = m_assetBundleManager;
+            return operation.Start(location, loadDependencyOperation);
         }
 
-        public override bool Release(IResourceLocation loc, object asset)
+        public override bool Release(IResourceLocation location, object asset)
         {
-            return m_assetBundleManager.Unload(loc);
+            if (location == null)
+                throw new System.ArgumentNullException("location");
+            if (asset == null)
+                throw new System.ArgumentNullException("asset");
+            return m_assetBundleManager.Unload(location);
         }
     }
 }
+#endif

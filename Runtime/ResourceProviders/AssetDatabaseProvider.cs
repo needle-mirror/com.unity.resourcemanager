@@ -1,53 +1,58 @@
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
-using UnityEngine;
-using Object = UnityEngine.Object;
-using ResourceManagement.AsyncOperations;
-using ResourceManagement.Util;
 
-namespace ResourceManagement.ResourceProviders
+namespace UnityEngine.ResourceManagement
 {
     public class AssetDatabaseProvider : ResourceProviderBase
     {
+        float m_loadDelay = .1f;
+        public AssetDatabaseProvider(float delay = .25f)
+        {
+            m_loadDelay = delay;
+        }
+
         internal class InternalOp<TObject> : InternalProviderOperation<TObject>
             where TObject : class
         {
-            public override InternalProviderOperation<TObject> Start(IResourceLocation loc, IAsyncOperation<IList<object>> loadDependencyOperation)
+            public InternalProviderOperation<TObject> Start(IResourceLocation location, float loadDelay)
             {
-                m_result = null;
-                CompletionUpdater.UpdateUntilComplete(loc.ToString(), () => {
-                    #if UNITY_EDITOR
-                        var res = UnityEditor.AssetDatabase.LoadAssetAtPath<Object>(loc.id) as TObject;
-                        SetResult(res);
-                    #endif
+                Result = null;
+                Context = location;
+                DelayedActionManager.AddAction((Action)CompleteLoad, loadDelay);
+                return base.Start(location);
+            }
 
-                        OnComplete();
-                        return true;
-                    });
-
-                return base.Start(loc, loadDependencyOperation);
+            void CompleteLoad()
+            {
+                SetResult(UnityEditor.AssetDatabase.LoadAssetAtPath<Object>((Context as IResourceLocation).InternalId) as TObject);
+                OnComplete();
             }
 
             public override TObject ConvertResult(AsyncOperation op) { return null; }
         }
 
-        public override IAsyncOperation<TObject> ProvideAsync<TObject>(IResourceLocation loc, IAsyncOperation<IList<object>> loadDependencyOperation)
+        public override IAsyncOperation<TObject> ProvideAsync<TObject>(IResourceLocation location, IAsyncOperation<IList<object>> loadDependencyOperation)
         {
-            var r = AsyncOperationCache.Instance.Acquire<InternalOp<TObject>, TObject>();
-            return r.Start(loc, loadDependencyOperation);
+            if (location == null)
+                throw new System.ArgumentNullException("location");
+            if (loadDependencyOperation == null)
+                throw new System.ArgumentNullException("loadDependencyOperation");
+            var operation = AsyncOperationCache.Instance.Acquire<InternalOp<TObject>, TObject>();
+            return operation.Start(location, m_loadDelay);
         }
 
-        public override bool Release(IResourceLocation loc, object asset)
+        public override bool Release(IResourceLocation location, object asset)
         {
+            if (location == null)
+                throw new System.ArgumentNullException("location");
             var obj = asset as Object;
 
             if (obj != null)
-            {
-                Resources.UnloadAsset(obj);
                 return true;
-            }
 
             return false;
         }
     }
 }
+#endif

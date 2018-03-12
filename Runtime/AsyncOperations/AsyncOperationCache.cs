@@ -1,26 +1,29 @@
 using System;
 using System.Collections.Generic;
 
-namespace ResourceManagement.AsyncOperations
+namespace UnityEngine.ResourceManagement
 {
     public class AsyncOperationCache
     {
-        public static readonly AsyncOperationCache m_instance = new AsyncOperationCache();
-
-        public static AsyncOperationCache Instance
-        {
-            get { return m_instance; }
-        }
+        public static readonly AsyncOperationCache Instance = new AsyncOperationCache();
+        readonly Dictionary<CacheKey, Stack<IAsyncOperation>> m_cache = new Dictionary<CacheKey, Stack<IAsyncOperation>>(new CacheKeyComparer());
+        readonly Dictionary<CacheKey, Stack<IAsyncOperation>> m_delayedReleases = new Dictionary<CacheKey, Stack<IAsyncOperation>>(new CacheKeyComparer());
+        int m_delayedFrame = -1;
 
         internal struct CacheKey
         {
-            public readonly Type opType;
-            public readonly Type objType;
+            public Type opType { get; private set; }
+            public Type objType { get; private set; }
 
-            public CacheKey(Type opType, Type objType)
+            internal CacheKey(Type opType, Type objType)
             {
                 this.opType = opType;
                 this.objType = objType;
+            }
+
+            public override string ToString()
+            {
+                return objType.Name + "|" + opType.Name;
             }
 
             public override int GetHashCode()
@@ -53,31 +56,69 @@ namespace ResourceManagement.AsyncOperations
             }
         }
 
-        readonly Dictionary<CacheKey, Stack<IAsyncOperation>> cache = new Dictionary<CacheKey, Stack<IAsyncOperation>>(new CacheKeyComparer());
-
-        public void Release<TObject>(IAsyncOperation op)
+        public void Release<TObject>(IAsyncOperation operation)
         {
-            var key = new CacheKey(op.GetType(), typeof(TObject));
-            Stack<IAsyncOperation> c;
-            if (!cache.TryGetValue(key, out c))
-                cache.Add(key, c = new Stack<IAsyncOperation>());
-            op.ResetStatus();
-            c.Push(op);
+            Debug.Assert(m_delayedReleases != null, "AsyncOperationCache.Release - m_cache == null.");
+            if (operation == null)
+                throw new ArgumentNullException("operation");
+            operation.Validate();
+
+            MoveDelayedOperationsToCache();
+
+            var key = new CacheKey(operation.GetType(), typeof(TObject));
+            Stack<IAsyncOperation> operationStack;
+            if (!m_delayedReleases.TryGetValue(key, out operationStack))
+                m_delayedReleases.Add(key, operationStack = new Stack<IAsyncOperation>());
+            operationStack.Push(operation);
         }
 
         public TAsyncOperation Acquire<TAsyncOperation, TObject>()
             where TAsyncOperation : IAsyncOperation, new()
         {
-            Stack<IAsyncOperation> c;
-            if (cache.TryGetValue(new CacheKey(typeof(TAsyncOperation), typeof(TObject)), out c) && c.Count > 0)
-                return (TAsyncOperation)c.Pop();
+            Debug.Assert(m_cache != null, "AsyncOperationCache.Acquire - m_cache == null.");
 
-            return new TAsyncOperation();
+            MoveDelayedOperationsToCache();
+
+            Stack<IAsyncOperation> operationStack;
+            var key = new CacheKey(typeof(TAsyncOperation), typeof(TObject));
+            if (m_cache.TryGetValue(key, out operationStack) && operationStack.Count > 0)
+            {
+                var op = (TAsyncOperation)operationStack.Pop();
+                op.IsValid = true;
+                op.ResetStatus();
+                return op;
+            }
+            var op2 = new TAsyncOperation();
+            op2.IsValid = true;
+            op2.ResetStatus();
+            return op2;
+        }
+
+        void MoveDelayedOperationsToCache()
+        {
+            if (Time.frameCount > m_delayedFrame)
+            {
+                m_delayedFrame = Time.frameCount;
+                foreach (var kvp in m_delayedReleases)
+                {
+                    Stack<IAsyncOperation> operationStack;
+                    if (!m_cache.TryGetValue(kvp.Key, out operationStack))
+                        m_cache.Add(kvp.Key, operationStack = new Stack<IAsyncOperation>());
+                    foreach (var o in kvp.Value)
+                    {
+                        o.Validate();
+                        o.IsValid = false;
+                        operationStack.Push(o);
+                    }
+                    kvp.Value.Clear();
+                }
+            }
         }
 
         public void Clear()
         {
-            cache.Clear();
+            Debug.Assert(m_cache != null, "AsyncOperationCache.Clear - m_cache == null.");
+            m_cache.Clear();
         }
     }
 }

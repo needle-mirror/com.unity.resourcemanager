@@ -1,26 +1,33 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine.Networking;
-using UnityEngine;
-using ResourceManagement.AsyncOperations;
 
-namespace ResourceManagement.ResourceProviders.Experimental
+namespace UnityEngine.ResourceManagement
 {
     public class RemoteTextureProvider : ResourceProviderBase
     {
-        public override bool CanProvide<TObject>(IResourceLocation loc)
+        public override bool CanProvide<TObject>(IResourceLocation location)
         {
-            return base.CanProvide<TObject>(loc) && ResourceManagement.Util.Config.IsInstance<TObject, Texture2D>();
+            return base.CanProvide<TObject>(location) && ResourceManagerConfig.IsInstance<TObject, Texture2D>();
         }
 
         internal class InternalOp<TObject> : InternalProviderOperation<TObject>
             where TObject : class
         {
-            public override InternalProviderOperation<TObject> Start(IResourceLocation loc, IAsyncOperation<IList<object>> loadDependencyOperation)
+            public InternalProviderOperation<TObject> Start(IResourceLocation location, IAsyncOperation<IList<object>> loadDependencyOperation)
             {
-                m_result = null;
-                loadDependencyOperation.completed += (obj) => UnityWebRequestTexture.GetTexture(loc.id).SendWebRequest().completed += OnComplete;
-                return base.Start(loc, loadDependencyOperation);
+                Result = null;
+                if (loadDependencyOperation != null && location != null)
+                {
+                    loadDependencyOperation.Completed += (obj) =>
+                    {
+                        var reqOp = UnityWebRequestTexture.GetTexture(location.InternalId).SendWebRequest();
+                        if (reqOp.isDone)
+                            DelayedActionManager.AddAction((System.Action<AsyncOperation>)OnComplete, 0, reqOp);
+                        else
+                            reqOp.completed += OnComplete;
+                    };
+                }
+                return base.Start(location);
             }
 
             public override TObject ConvertResult(AsyncOperation op)
@@ -29,14 +36,18 @@ namespace ResourceManagement.ResourceProviders.Experimental
             }
         }
 
-        public override IAsyncOperation<TObject> ProvideAsync<TObject>(IResourceLocation loc, IAsyncOperation<IList<object>> loadDependencyOperation)
+        public override IAsyncOperation<TObject> ProvideAsync<TObject>(IResourceLocation location, IAsyncOperation<IList<object>> loadDependencyOperation)
         {
-            var r = AsyncOperationCache.Instance.Acquire<InternalOp<TObject>, TObject>();
-            return r.Start(loc, loadDependencyOperation);
+            var operation = AsyncOperationCache.Instance.Acquire<InternalOp<TObject>, TObject>();
+            return operation.Start(location, loadDependencyOperation);
         }
 
-        public override bool Release(IResourceLocation loc, object asset)
+        public override bool Release(IResourceLocation location, object asset)
         {
+            if (location == null)
+                throw new System.ArgumentNullException("location");
+            if (asset == null)
+                throw new System.ArgumentNullException("asset");
             return true;
         }
     }
