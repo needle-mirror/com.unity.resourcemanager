@@ -25,6 +25,11 @@ namespace UnityEngine.ResourceManagement
         public static ISceneProvider SceneProvider { get; set; }
 
         /// <summary>
+        /// Global exception handler.  This will be called whenever an IAsyncOperation.OperationException is set to a non-null value.
+        /// </summary>
+        public static Action<IAsyncOperation, Exception> ExceptionHandler { get; set; }
+
+        /// <summary>
         /// Gets the list of configured <see cref="IResourceProvider"/> objects. Resource Providers handle load and release operations for <see cref="IResourceLocation"/> objects.
         /// </summary>
         /// <value>The resource providers list.</value>
@@ -36,6 +41,18 @@ namespace UnityEngine.ResourceManagement
                 return s_resourceProviders;
             }
         }
+
+        /// <summary>
+        /// Used to set the function that will be used to resolve any runtime variables embedded in location internal ids.
+        /// </summary>
+        public static Func<string, string> OnResolveInternalId { internal get; set; }
+        public static string ResolveInternalId(string id)
+        {
+            if (OnResolveInternalId == null)
+                return id;
+            return OnResolveInternalId(id);
+        }
+
 
         /// <summary>
         /// Gets the appropriate <see cref="IResourceProvider"/> for the given <paramref name="location"/>.

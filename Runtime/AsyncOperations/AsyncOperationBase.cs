@@ -141,6 +141,8 @@ namespace UnityEngine.ResourceManagement
             protected set
             {
                 m_error = value;
+                if (m_error != null && ResourceManager.ExceptionHandler != null)
+                    ResourceManager.ExceptionHandler(this, value);
             }
         }
         /// <inheritdoc />
@@ -235,9 +237,8 @@ namespace UnityEngine.ResourceManagement
                 }
                 catch (Exception e)
                 {
-                    Debug.LogException(e);
-                    m_error = e;
                     m_status = AsyncOperationStatus.Failed;
+                    OperationException = e;
                 }
             }
 
@@ -251,9 +252,8 @@ namespace UnityEngine.ResourceManagement
                     }
                     catch (Exception e)
                     {
-                        Debug.LogException(e);
-                        m_error = e;
                         m_status = AsyncOperationStatus.Failed;
+                        OperationException = e;
                     }
                 }
                 m_completedActionT.Clear();
@@ -291,6 +291,7 @@ namespace UnityEngine.ResourceManagement
             OperationException = error;
             Key = key;
             SetResult(val);
+            Retain();
             DelayedActionManager.AddAction((Action)InvokeCompletionEvent, 0);
             return this;
         }
@@ -333,12 +334,10 @@ namespace UnityEngine.ResourceManagement
                 {
                     if (m_dependencyOperation == null)
                         return 0;
-
-                    if (m_dependencyOperation == null)
-                        return 0;
-
+                            
                     return m_dependencyOperation.PercentComplete * .5f;
                 }
+                    
                 return m_dependentOperation.PercentComplete * .5f + .5f;
             }
         }
@@ -476,6 +475,31 @@ namespace UnityEngine.ResourceManagement
             }
             return this;
         }
+
+        /// <summary>
+        /// Combines a set of IAsyncOperations into a single operation
+        /// </summary>
+        /// <param name="context">The context object.</param>
+        /// <param name="key">The key object.</param>
+        /// <param name="operations">The list of operations to wait on.</param>
+        /// <returns></returns>
+        public virtual IAsyncOperation<IList<TObject>> Start(object context, object key, List<IAsyncOperation<TObject>> operations)
+        {
+            m_context = context;
+            m_loadedCount = 0;
+            m_operations = operations;
+            foreach (var op in m_operations)
+            {
+                Result.Add(default(TObject));
+                op.Key = key;
+                op.Completed += m_internalOnComplete;
+            }
+            if (m_operations.Count == 0)
+                InvokeCompletionEvent();
+            return this;
+        }
+
+
         /// <inheritdoc />
         public override bool IsDone
         {
@@ -502,7 +526,10 @@ namespace UnityEngine.ResourceManagement
         private void OnOperationCompleted(IAsyncOperation<TObject> op)
         {
             if (m_callback != null)
+            {
+                op.Retain();
                 m_callback(op);
+            }
             m_loadedCount++;
             for (int i = 0; i < m_operations.Count; i++)
             {
@@ -512,7 +539,7 @@ namespace UnityEngine.ResourceManagement
                     if (op.Status != AsyncOperationStatus.Succeeded)
                     {
                         Status = op.Status;
-                        m_error = op.OperationException;
+                        OperationException = op.OperationException;
                     }
                     break;
                 }

@@ -8,12 +8,26 @@ namespace UnityEngine.ResourceManagement
     /// </summary>
     public abstract class ResourceProviderBase : IResourceProvider
     {
-        protected ResourceProviderBase() { }
+        protected string m_providerId;
 
+        protected ResourceProviderBase() { }
         /// <inheritdoc/>
         public virtual string ProviderId
         {
-            get { return GetType().FullName; }
+            get
+            {
+                if(string.IsNullOrEmpty(m_providerId))
+                    m_providerId = GetType().FullName;
+
+                return m_providerId;
+            }
+        }
+
+        /// <inheritdoc/>
+        public virtual bool Initialize(string id, string data)
+        {
+            m_providerId = id;
+            return !string.IsNullOrEmpty(m_providerId);
         }
 
         /// <inheritdoc/>
@@ -28,14 +42,13 @@ namespace UnityEngine.ResourceManagement
         /// <inheritdoc/>
         public override string ToString()
         {
-            return string.Format("[{0}]", ProviderId);
+            return ProviderId;
         }
 
         /// <inheritdoc/>
         public abstract IAsyncOperation<TObject> Provide<TObject>(IResourceLocation location, IAsyncOperation<IList<object>> loadDependencyOperation)
         where TObject : class;
 
-        /// <inheritdoc/>
         public virtual bool Release(IResourceLocation location, object asset)
         {
             if (location == null)
